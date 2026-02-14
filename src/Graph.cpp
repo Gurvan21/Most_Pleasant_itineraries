@@ -6,6 +6,7 @@
 #include <limits>
 #include <optional>
 #include <queue>
+#include <set>
 #include <stack>
 #include <sstream>
 #include <utility>
@@ -16,6 +17,7 @@ void Graph::add_edge(Vertex u, Vertex v, Weight w) {
     assert(alive[u] && alive[v]);
     cont[u].push_back({v, w});
     if (!directed) cont[v].push_back({u, w});
+    center_valid_ = false;
 }
 
 void Graph::print_graph(std::ostream& out) const {
@@ -113,6 +115,7 @@ void Graph::remove_vertex(Vertex v) {
     cont[v].clear();
     alive[v] = 0;
     free_vertices.push_back(v);
+    center_valid_ = false;
 }
 
 int Graph::num_vertices() const { return static_cast<int>(cont.size()); }
@@ -291,7 +294,115 @@ std::optional<Weight> Graph::max_on_path(Vertex u, Vertex v) const {
     return max_on_path_dfs(*this, u, v, no_from, std::numeric_limits<Weight>::lowest());
 }
 
+// --- Centre, parent, LCA (arbre) ---
+namespace {
+// BFS depuis start ; retourne (sommet le plus éloigné, chemin start -> farthest).
+std::pair<Vertex, std::vector<Vertex>> farthest_and_path(const Graph& g, Vertex start) {
+    const int n = g.num_vertices();
+    std::vector<int> dist(static_cast<size_t>(n), -1);
+    std::vector<Vertex> parent_bfs(static_cast<size_t>(n), -1);
+    std::queue<Vertex> q;
+    q.push(start);
+    dist[static_cast<size_t>(start)] = 0;
+    while (!q.empty()) {
+        Vertex u = q.front();
+        q.pop();
+        for (const auto& [v, w] : g.neighbors(u)) {
+            (void)w;
+            if (!g.is_alive(v) || dist[static_cast<size_t>(v)] >= 0) continue;
+            dist[static_cast<size_t>(v)] = dist[static_cast<size_t>(u)] + 1;
+            parent_bfs[static_cast<size_t>(v)] = u;
+            q.push(v);
+        }
+    }
+    Vertex farthest = start;
+    for (Vertex v = 0; v < n; ++v)
+        if (g.is_alive(v) && dist[static_cast<size_t>(v)] >= 0 &&
+            dist[static_cast<size_t>(v)] > dist[static_cast<size_t>(farthest)])
+            farthest = v;
+    std::vector<Vertex> path;
+    for (Vertex v = farthest; v != -1; v = parent_bfs[static_cast<size_t>(v)])
+        path.push_back(v);
+    std::reverse(path.begin(), path.end());
+    return {farthest, path};
+}
+
+void dfs_fill_parent(const Graph& g, Vertex current, Vertex from,
+                     std::vector<Vertex>& parent) {
+    for (const auto& [v, w] : g.neighbors(current)) {
+        (void)w;
+        if (!g.is_alive(v) || v == from) continue;
+        parent[static_cast<size_t>(v)] = current;
+        dfs_fill_parent(g, v, current, parent);
+    }
+}
+}  // namespace
+
+void Graph::compute_center_and_parent() {
+    assert(!directed && "Centre/parent pour graphe non orienté (arbre)");
+    const int n = num_vertices();
+    Vertex start = -1;
+    for (Vertex v = 0; v < n; ++v)
+        if (is_alive(v)) { start = v; break; }
+    if (start == -1) {
+        center_valid_ = false;
+        return;
+    }
+    auto [u, path1] = farthest_and_path(*this, start);
+    auto [v, path_diam] = farthest_and_path(*this, u);
+    const int L = static_cast<int>(path_diam.size()) - 1;  // nombre d'arêtes
+    if (L <= 0) {
+        centre_ = path_diam.empty() ? start : path_diam[0];
+        diameter_length_ = L;
+        parent_.assign(static_cast<size_t>(n), -1);
+        parent_[static_cast<size_t>(centre_)] = -1;
+        dfs_fill_parent(*this, centre_, -1, parent_);
+        center_valid_ = true;
+        return;
+    }
+    if (L % 2 == 0) {
+        centre_ = path_diam[static_cast<size_t>(L / 2)];
+    } else {
+        centre_ = path_diam[static_cast<size_t>((L + 1) / 2)];
+    }
+    diameter_length_ = L;
+    parent_.resize(static_cast<size_t>(n), -1);
+    parent_[static_cast<size_t>(centre_)] = -1;
+    dfs_fill_parent(*this, centre_, -1, parent_);
+    center_valid_ = true;
+}
+
+bool Graph::has_center() const { return center_valid_; }
+
+Vertex Graph::get_center() const {
+    assert(center_valid_ && "Appeler compute_center_and_parent() d'abord");
+    return centre_;
+}
+
+int Graph::get_diameter_length() const {
+    assert(center_valid_ && "Appeler compute_center_and_parent() d'abord");
+    return diameter_length_;
+}
+
+Vertex Graph::get_parent(Vertex v) const {
+    assert(center_valid_ && "Appeler compute_center_and_parent() d'abord");
+    assert(0 <= v && v < num_vertices());
+    return parent_[static_cast<size_t>(v)];
+}
+
+std::optional<Vertex> Graph::lca(Vertex u, Vertex v) const {
+    if (!center_valid_) return std::nullopt;
+    if (!is_alive(u) || !is_alive(v)) return std::nullopt;
+    std::set<Vertex> anc_u;
+    for (Vertex w = u; w != -1; w = get_parent(w))
+        anc_u.insert(w);
+    for (Vertex w = v; w != -1; w = get_parent(w))
+        if (anc_u.count(w)) return w;
+    return std::nullopt;
+}
+
 Vertex Graph::add_vertex() {
+    center_valid_ = false;
     if (!free_vertices.empty()) {
         int v = free_vertices.back();
         free_vertices.pop_back();
@@ -307,11 +418,13 @@ Vertex Graph::add_vertex() {
 Graph::Graph() : cont(0), alive(), free_vertices(), directed(false) {}
 
 Graph::Graph(std::vector<std::vector<std::pair<Vertex, Weight>>> adj, bool directed)
-    : cont(std::move(adj)), alive(cont.size(), 1), free_vertices(), directed(directed) {}
+    : cont(std::move(adj)), alive(cont.size(), 1), free_vertices(), directed(directed),
+      center_valid_(false), centre_(-1), parent_(), diameter_length_(-1) {}
 
 void Graph::delete_edge(Vertex u, Vertex v, std::optional<Weight> w)
 {
     assert(0 <= u && u < num_vertices() && 0 <= v && v < num_vertices());
+    center_valid_ = false;
     auto match = [&](const std::pair<Vertex, Weight>& e) {
         if (e.first != v) return false;
         if (!w) return true;

@@ -1,0 +1,171 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\title{Centre d'un arbre, tableau parent et LCA}
+\author{Most Pleasant Itineraries}
+\date{}
+
+\begin{document}
+\maketitle
+
+\section{Objectif}
+
+Pour un \textbf{arbre} $T = (V,E)$ (graphe connexe sans cycle), on souhaite :
+\begin{enumerate}[leftmargin=*]
+  \item Trouver le \textbf{centre} de l'arbre (sommet ou milieu du diamètre).
+  \item Stocker le \textbf{parent} de chaque sommet dans un tableau (arbre enraciné au centre).
+  \item Répondre aux requêtes \textbf{LCA}$(u,v)$ (plus bas ancêtre commun).
+\end{enumerate}
+
+\section{Méthode : diamètre puis centre}
+
+\subsection{Idée}
+
+\begin{enumerate}
+  \item Partir d'un sommet \textbf{quelconque} $s$, faire un \textbf{BFS} (ou DFS) pour trouver un sommet $u$ \textbf{le plus éloigné} de $s$ (en nombre d'arêtes).
+  \item Repartir de $u$, refaire un BFS pour trouver un sommet $v$ le plus éloigné de $u$. Le chemin $u \leftrightarrow v$ est un \textbf{diamètre} de l'arbre (un plus long chemin).
+  \item Le \textbf{centre} est le \textbf{milieu} de ce diamètre : un sommet si le diamètre a un nombre impair d'arêtes, sinon l'arête du milieu (on choisit alors un des deux sommets comme racine).
+  \item On enracine l'arbre en ce centre et on remplit un tableau \texttt{parent} par un DFS depuis la racine.
+  \item Pour \textbf{LCA}$(u,v)$ : on remonte les ancêtres de $u$, puis on remonte depuis $v$ jusqu'au premier ancêtre commun.
+\end{enumerate}
+
+\subsection{Pourquoi deux BFS suffisent}
+
+En partant d'un sommet arbitraire, un sommet à \textbf{distance maximale} est toujours une \textbf{extrémité d'un diamètre}. En repartant de cette extrémité, le sommet le plus éloigné donne l'autre extrémité et la longueur du diamètre. C'est une propriété classique des arbres.
+
+\section{Algorithme 1 : sommet le plus éloigné et chemin}
+
+On utilise un BFS depuis \texttt{start} ; on garde les distances et les « parents BFS » pour reconstruire le chemin.
+
+\begin{algorithm}[H]
+\caption{Farthest et chemin (BFS)}
+\begin{algorithmic}[1]
+\Function{FarthestEtChemin}{$T$, \texttt{start}}
+  \State $n \gets |V(T)|$
+  \State \texttt{dist}[0..n-1] $\gets -1$, \texttt{parent\_bfs}[0..n-1] $\gets -1$
+  \State \texttt{file} $\gets$ file contenant \texttt{start}
+  \State \texttt{dist[start]} $\gets 0$
+  \While{\texttt{file} non vide}
+    \State $u \gets$ défiler(\texttt{file})
+    \For{chaque voisin $v$ de $u$ avec $v$ vivant}
+      \If{\texttt{dist[v]} $= -1$}
+        \State \texttt{dist[v]} $\gets$ \texttt{dist[u]} $+ 1$
+        \State \texttt{parent\_bfs[v]} $\gets u$
+        \State enfiler(\texttt{file}, $v$)
+      \EndIf
+    \EndFor
+  \EndWhile
+  \State \texttt{farthest} $\gets$ un sommet $v$ tel que \texttt{dist[v]} soit maximal
+  \State \texttt{path} $\gets$ liste vide
+  \State $v \gets$ \texttt{farthest}
+  \While{$v \neq -1$}
+    \State ajouter $v$ au \textbf{début} de \texttt{path}
+    \State $v \gets$ \texttt{parent\_bfs[v]}
+  \EndWhile
+  \State \Return $(\texttt{farthest}, \texttt{path})$
+\EndFunction
+\end{algorithmic}
+\end{algorithm}
+
+\section{Algorithme 2 : diamètre et centre}
+
+\begin{algorithm}[H]
+\caption{Diamètre et centre}
+\begin{algorithmic}[1]
+\Function{DiametreEtCentre}{$T$}
+  \State $s \gets$ un sommet vivant quelconque (ex.\ $0$)
+  \State $(u, \texttt{path\_su}) \gets$ \Call{FarthestEtChemin}{$T$, $s$}
+  \State $(v, \texttt{path\_diam}) \gets$ \Call{FarthestEtChemin}{$T$, $u$}
+  \Comment{\texttt{path\_diam} = chemin $u \to v$ = diamètre}
+  \State $L \gets |\texttt{path\_diam}| - 1$
+  \Comment{nombre d'arêtes du diamètre}
+  \If{$L$ pair ($L = 2k$)}
+    \State \texttt{centre} $\gets \texttt{path\_diam}[k]$
+    \Comment{on choisit une des deux extrémités de l'arête centrale}
+  \Else
+    \State \texttt{centre} $\gets \texttt{path\_diam}[(L+1)/2]$
+    \Comment{sommet du milieu}
+  \EndIf
+  \State \Return $(\texttt{path\_diam}, L, \texttt{centre})$
+\EndFunction
+\end{algorithmic}
+\end{algorithm}
+
+\section{Algorithme 3 : tableau parent}
+
+On remplit \texttt{parent} par un DFS depuis la racine \texttt{centre}, en ne repassant pas par le sommet d'où l'on vient (\texttt{from}).
+
+\begin{algorithm}[H]
+\caption{Remplir le tableau parent}
+\begin{algorithmic}[1]
+\Function{RemplirParent}{$T$, \texttt{racine}}
+  \State \texttt{parent}[0..n-1] $\gets -1$
+  \State \texttt{parent[racine]} $\gets -1$
+  \State \Call{DFSParent}{$T$, \texttt{racine}, $-1$, \texttt{parent}}
+\EndFunction
+\State
+\Function{DFSParent}{$T$, \texttt{current}, \texttt{from}, \texttt{parent}}
+  \For{chaque voisin $v$ de \texttt{current}}
+    \If{$v \neq \texttt{from}$ et $v$ vivant}
+      \State \texttt{parent[v]} $\gets$ \texttt{current}
+      \State \Call{DFSParent}{$T$, $v$, \texttt{current}, \texttt{parent}}
+    \EndIf
+  \EndFor
+\EndFunction
+\end{algorithmic}
+\end{algorithm}
+
+\section{Algorithme 4 : LCA par remontée des ancêtres}
+
+\begin{algorithm}[H]
+\caption{LCA$(u, v)$}
+\begin{algorithmic}[1]
+\Function{LCA}{$u$, $v$}
+  \State \texttt{ancetres\_u} $\gets$ ensemble vide
+  \State $w \gets u$
+  \While{$w \neq -1$}
+    \State ajouter $w$ à \texttt{ancetres\_u}
+    \State $w \gets \texttt{parent}[w]$
+  \EndWhile
+  \State $w \gets v$
+  \While{$w \notin \texttt{ancetres\_u}$}
+    \State $w \gets \texttt{parent}[w]$
+  \EndWhile
+  \State \Return $w$
+  \Comment{premier ancêtre de $v$ qui est ancêtre de $u$ = LCA}
+\EndFunction
+\end{algorithmic}
+\end{algorithm}
+
+\section{Complexité}
+
+\begin{itemize}[leftmargin=*]
+  \item \textbf{FarthestEtChemin} : un BFS, $O(n + m) = O(n)$ pour un arbre ($m = n - 1$).
+  \item \textbf{DiametreEtCentre} : deux BFS + parcours du chemin, $O(n)$.
+  \item \textbf{RemplirParent} : un DFS, $O(n)$.
+  \item \textbf{LCA} (une requête) : $O(h)$ où $h$ est la hauteur de l'arbre, au pire $O(n)$. Avec $Q$ requêtes : $O(Q \cdot n)$. (On peut faire $O(\log n)$ par requête avec binary lifting après prétraitement $O(n \log n)$.)
+\end{itemize}
+
+\section{Résumé des attributs (implémentation)}
+
+\begin{center}
+\begin{tabular}{|l|l|l|}
+\hline
+Attribut & Type & Rôle \\
+\hline
+\texttt{centre\_} & \texttt{Vertex} & Racine (centre de l'arbre). \\
+\texttt{parent\_} & \texttt{vector<Vertex>} & \texttt{parent\_[v]} = parent de $v$ ; \texttt{parent\_[racine]} $= -1$. \\
+\texttt{diameter\_length\_} & \texttt{int} & Nombre d'arêtes du diamètre. \\
+\texttt{center\_valid\_} & \texttt{bool} & True après \texttt{compute\_center\_and\_parent()}. \\
+\hline
+\end{tabular}
+\end{center}
+
+\end{document}

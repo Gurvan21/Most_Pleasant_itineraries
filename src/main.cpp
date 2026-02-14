@@ -98,6 +98,25 @@ int main() {
         else    std::cout << "max_on_path(1, 4) = (non connectés)\n";
         if (m_same) std::cout << "max_on_path(0, 0) = " << *m_same << " (chemin vide)\n";
         else        std::cout << "max_on_path(0, 0) = (non connectés)\n";
+
+        // --- Centre, parent, LCA (arbre MST) ---
+        std::cout << "\n--- Centre, parent, LCA (arbre MST) ---\n";
+        mst_p.compute_center_and_parent();
+        if (mst_p.has_center()) {
+            std::cout << "Centre (racine) : " << mst_p.get_center() << "\n";
+            std::cout << "Diamètre (nombre d'arêtes) : " << mst_p.get_diameter_length() << "\n";
+            std::cout << "Parent : ";
+            for (int i = 0; i < mst_p.num_vertices(); ++i)
+                if (mst_p.is_alive(i))
+                    std::cout << "parent[" << i << "]=" << mst_p.get_parent(i) << " ";
+            std::cout << "\n";
+            auto l1 = mst_p.lca(0, 2);
+            auto l2 = mst_p.lca(1, 4);
+            auto l3 = mst_p.lca(3, 3);
+            if (l1) std::cout << "LCA(0, 2) = " << *l1 << "\n";
+            if (l2) std::cout << "LCA(1, 4) = " << *l2 << "\n";
+            if (l3) std::cout << "LCA(3, 3) = " << *l3 << "\n";
+        }
     }
 
     return 0;
