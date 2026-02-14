@@ -69,6 +69,8 @@ public:
     Vertex get_parent(Vertex v) const;
     /** Plus bas ancêtre commun de u et v. Précondition : has_center(), u et v vivants. */
     std::optional<Vertex> lca(Vertex u, Vertex v) const;
+    /** Max des poids d'arêtes sur le chemin de u vers l'ancêtre a (a doit être ancêtre de u). O(log n). */
+    std::optional<Weight> max_on_path_to_ancestor(Vertex u, Vertex a) const;
 
     // --- Affichage / observation ---
     /** Liste d'adjacence (sommets vivants uniquement). */
@@ -94,7 +96,13 @@ private:
     bool center_valid_ = false;
     Vertex centre_ = -1;
     std::vector<Vertex> parent_;
+    std::vector<Weight> parent_edge_weight_;  // poids de l'arête (v, parent[v])
+    std::vector<int> depth_;                   // profondeur depuis la racine (nombre d'arêtes)
+    std::vector<std::vector<Vertex>> up_;      // up_[v][k] = 2^k-ième ancêtre de v
+    std::vector<std::vector<Weight>> max_up_;  // max_up_[v][k] = max sur le chemin v -> up_[v][k]
     int diameter_length_ = -1;
+
+    void build_binary_lifting(int n);
 };
 
 #endif

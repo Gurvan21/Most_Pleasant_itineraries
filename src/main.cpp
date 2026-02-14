@@ -116,6 +116,11 @@ int main() {
             if (l1) std::cout << "LCA(0, 2) = " << *l1 << "\n";
             if (l2) std::cout << "LCA(1, 4) = " << *l2 << "\n";
             if (l3) std::cout << "LCA(3, 3) = " << *l3 << "\n";
+            // max_on_path_to_ancestor (O(log n)) : u -> ancêtre a
+            auto r1 = mst_p.max_on_path_to_ancestor(2, 0);  // chemin 2 -> 1 -> 0, max = 2
+            auto r2 = mst_p.max_on_path_to_ancestor(4, 0);   // 4 -> 0, max = 1.5
+            if (r1) std::cout << "max_on_path_to_ancestor(2, 0) = " << *r1 << "\n";
+            if (r2) std::cout << "max_on_path_to_ancestor(4, 0) = " << *r2 << "\n";
         }
     }
 

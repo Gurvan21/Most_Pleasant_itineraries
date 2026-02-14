@@ -328,12 +328,13 @@ std::pair<Vertex, std::vector<Vertex>> farthest_and_path(const Graph& g, Vertex 
 }
 
 void dfs_fill_parent(const Graph& g, Vertex current, Vertex from,
-                     std::vector<Vertex>& parent) {
+                     std::vector<Vertex>& parent,
+                     std::vector<Weight>& parent_edge_weight) {
     for (const auto& [v, w] : g.neighbors(current)) {
-        (void)w;
         if (!g.is_alive(v) || v == from) continue;
         parent[static_cast<size_t>(v)] = current;
-        dfs_fill_parent(g, v, current, parent);
+        parent_edge_weight[static_cast<size_t>(v)] = w;
+        dfs_fill_parent(g, v, current, parent, parent_edge_weight);
     }
 }
 }  // namespace
@@ -356,7 +357,9 @@ void Graph::compute_center_and_parent() {
         diameter_length_ = L;
         parent_.assign(static_cast<size_t>(n), -1);
         parent_[static_cast<size_t>(centre_)] = -1;
-        dfs_fill_parent(*this, centre_, -1, parent_);
+        parent_edge_weight_.resize(static_cast<size_t>(n), 0);
+        dfs_fill_parent(*this, centre_, -1, parent_, parent_edge_weight_);
+        build_binary_lifting(n);
         center_valid_ = true;
         return;
     }
@@ -368,8 +371,53 @@ void Graph::compute_center_and_parent() {
     diameter_length_ = L;
     parent_.resize(static_cast<size_t>(n), -1);
     parent_[static_cast<size_t>(centre_)] = -1;
-    dfs_fill_parent(*this, centre_, -1, parent_);
+    parent_edge_weight_.resize(static_cast<size_t>(n), 0);
+    dfs_fill_parent(*this, centre_, -1, parent_, parent_edge_weight_);
+    build_binary_lifting(n);
     center_valid_ = true;
+}
+
+void Graph::build_binary_lifting(int n) {
+    depth_.assign(static_cast<size_t>(n), -1);
+    depth_[static_cast<size_t>(centre_)] = 0;
+    std::queue<Vertex> q;
+    q.push(centre_);
+    while (!q.empty()) {
+        Vertex u = q.front();
+        q.pop();
+        for (const auto& [v, w] : neighbors(u)) {
+            (void)w;
+            if (!is_alive(v) || parent_[static_cast<size_t>(v)] != u) continue;
+            depth_[static_cast<size_t>(v)] = depth_[static_cast<size_t>(u)] + 1;
+            q.push(v);
+        }
+    }
+    int max_k = 0;
+    while ((1 << max_k) < n) ++max_k;
+    up_.assign(static_cast<size_t>(n), std::vector<Vertex>(static_cast<size_t>(max_k + 1), -1));
+    max_up_.assign(static_cast<size_t>(n), std::vector<Weight>(static_cast<size_t>(max_k + 1), std::numeric_limits<Weight>::lowest()));
+    for (Vertex v = 0; v < n; ++v) {
+        if (!is_alive(v) || depth_[static_cast<size_t>(v)] < 0) continue;
+        up_[static_cast<size_t>(v)][0] = parent_[static_cast<size_t>(v)];
+        if (parent_[static_cast<size_t>(v)] >= 0)
+            max_up_[static_cast<size_t>(v)][0] = parent_edge_weight_[static_cast<size_t>(v)];
+    }
+    for (int k = 1; k <= max_k; ++k) {
+        for (Vertex v = 0; v < n; ++v) {
+            if (!is_alive(v) || depth_[static_cast<size_t>(v)] < 0) continue;
+            Vertex mid = up_[static_cast<size_t>(v)][static_cast<size_t>(k - 1)];
+            if (mid < 0) {
+                up_[static_cast<size_t>(v)][static_cast<size_t>(k)] = -1;
+                continue;
+            }
+            up_[static_cast<size_t>(v)][static_cast<size_t>(k)] = up_[static_cast<size_t>(mid)][static_cast<size_t>(k - 1)];
+            Weight w1 = max_up_[static_cast<size_t>(v)][static_cast<size_t>(k - 1)];
+            Weight w2 = up_[static_cast<size_t>(mid)][static_cast<size_t>(k - 1)] >= 0
+                ? max_up_[static_cast<size_t>(mid)][static_cast<size_t>(k - 1)]
+                : std::numeric_limits<Weight>::lowest();
+            max_up_[static_cast<size_t>(v)][static_cast<size_t>(k)] = (w1 > w2 ? w1 : w2);
+        }
+    }
 }
 
 bool Graph::has_center() const { return center_valid_; }
@@ -399,6 +447,28 @@ std::optional<Vertex> Graph::lca(Vertex u, Vertex v) const {
     for (Vertex w = v; w != -1; w = get_parent(w))
         if (anc_u.count(w)) return w;
     return std::nullopt;
+}
+
+std::optional<Weight> Graph::max_on_path_to_ancestor(Vertex u, Vertex a) const {
+    if (!center_valid_ || !is_alive(u) || !is_alive(a)) return std::nullopt;
+    if (u == a) return 0;
+    const int du = depth_[static_cast<size_t>(u)];
+    const int da = depth_[static_cast<size_t>(a)];
+    int d = du - da;
+    if (d <= 0) return std::nullopt;  // a n'est pas un ancêtre (ou u == a déjà traité)
+    const int max_k = static_cast<int>(up_[static_cast<size_t>(u)].size()) - 1;
+    Weight result = std::numeric_limits<Weight>::lowest();
+    Vertex current = u;
+    for (int k = max_k; k >= 0 && d > 0; --k) {
+        if (d >= (1 << k)) {
+            Weight w = max_up_[static_cast<size_t>(current)][static_cast<size_t>(k)];
+            if (w > result) result = w;
+            current = up_[static_cast<size_t>(current)][static_cast<size_t>(k)];
+            d -= (1 << k);
+        }
+    }
+    if (current != a) return std::nullopt;  // a n'est pas ancêtre de u
+    return result;
 }
 
 Vertex Graph::add_vertex() {
