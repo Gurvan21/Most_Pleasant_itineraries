@@ -6,7 +6,6 @@
 #include <limits>
 #include <optional>
 #include <queue>
-#include <set>
 #include <stack>
 #include <sstream>
 #include <utility>
@@ -18,6 +17,7 @@ void Graph::add_edge(Vertex u, Vertex v, Weight w) {
     cont[u].push_back({v, w});
     if (!directed) cont[v].push_back({u, w});
     center_valid_ = false;
+    max_path_table_.clear();
 }
 
 void Graph::print_graph(std::ostream& out) const {
@@ -116,6 +116,7 @@ void Graph::remove_vertex(Vertex v) {
     alive[v] = 0;
     free_vertices.push_back(v);
     center_valid_ = false;
+    max_path_table_.clear();
 }
 
 int Graph::num_vertices() const { return static_cast<int>(cont.size()); }
@@ -286,7 +287,7 @@ std::optional<Weight> max_on_path_dfs(const Graph& g, Vertex current, Vertex tar
 }
 }  // namespace
 
-std::optional<Weight> Graph::max_on_path(Vertex u, Vertex v) const {
+std::optional<Weight> Graph::itineraries_v1(Vertex u, Vertex v) const {
     if (u == v) return 0;  // chemin vide
     if (!is_alive(u) || !is_alive(v)) return std::nullopt;
     // -1 n'est pas un sommet valide : pas de "from" au premier appel
@@ -347,6 +348,7 @@ void Graph::compute_center_and_parent() {
         if (is_alive(v)) { start = v; break; }
     if (start == -1) {
         center_valid_ = false;
+        max_path_table_.clear();
         return;
     }
     auto [u, path1] = farthest_and_path(*this, start);
@@ -441,12 +443,79 @@ Vertex Graph::get_parent(Vertex v) const {
 std::optional<Vertex> Graph::lca(Vertex u, Vertex v) const {
     if (!center_valid_) return std::nullopt;
     if (!is_alive(u) || !is_alive(v)) return std::nullopt;
-    std::set<Vertex> anc_u;
-    for (Vertex w = u; w != -1; w = get_parent(w))
-        anc_u.insert(w);
-    for (Vertex w = v; w != -1; w = get_parent(w))
-        if (anc_u.count(w)) return w;
-    return std::nullopt;
+    if (up_.empty()) return std::nullopt;
+    const int du = depth_[static_cast<size_t>(u)];
+    const int dv = depth_[static_cast<size_t>(v)];
+    if (du < 0 || dv < 0) return std::nullopt;
+    // Ramener le nœud le plus profond au même niveau que l'autre
+    if (du < dv) std::swap(u, v);  // après : depth[u] >= depth[v]
+    int d = depth_[static_cast<size_t>(u)] - depth_[static_cast<size_t>(v)];
+    const int max_k = static_cast<int>(up_[static_cast<size_t>(u)].size()) - 1;
+    for (int k = max_k; k >= 0 && d > 0; --k)
+        if (d >= (1 << k)) {
+            u = up_[static_cast<size_t>(u)][static_cast<size_t>(k)];
+            d -= (1 << k);
+        }
+    if (u == v) return u;
+    for (int k = max_k; k >= 0; --k) {
+        if (up_[static_cast<size_t>(u)][static_cast<size_t>(k)] != up_[static_cast<size_t>(v)][static_cast<size_t>(k)]) {
+            u = up_[static_cast<size_t>(u)][static_cast<size_t>(k)];
+            v = up_[static_cast<size_t>(v)][static_cast<size_t>(k)];
+        }
+    }
+    return up_[static_cast<size_t>(u)][0];  // parent commun
+}
+
+std::vector<std::optional<Vertex>> Graph::tarjan_lca(const std::vector<std::pair<Vertex, Vertex>>& queries) const {
+    std::vector<std::optional<Vertex>> result(queries.size(), std::nullopt);
+    if (!center_valid_) return result;
+    const int n = num_vertices();
+    std::vector<std::vector<Vertex>> children(static_cast<size_t>(n));
+    for (Vertex v = 0; v < n; ++v) {
+        if (!is_alive(v)) continue;
+        Vertex p = parent_[static_cast<size_t>(v)];
+        if (p >= 0) children[static_cast<size_t>(p)].push_back(v);
+    }
+    std::vector<std::vector<std::pair<Vertex, size_t>>> q_by_node(static_cast<size_t>(n));
+    for (size_t i = 0; i < queries.size(); ++i) {
+        Vertex a = queries[i].first, b = queries[i].second;
+        if (!is_alive(a) || !is_alive(b)) continue;
+        q_by_node[static_cast<size_t>(a)].emplace_back(b, i);
+        if (a != b) q_by_node[static_cast<size_t>(b)].emplace_back(a, i);
+    }
+    std::vector<Vertex> parent_uf(static_cast<size_t>(n), -1);
+    std::vector<Vertex> set_ancestor(static_cast<size_t>(n), -1);
+    std::vector<char> visited(static_cast<size_t>(n), 0);
+
+    std::function<Vertex(Vertex)> Find = [&](Vertex x) {
+        if (parent_uf[static_cast<size_t>(x)] != x)
+            parent_uf[static_cast<size_t>(x)] = Find(parent_uf[static_cast<size_t>(x)]);
+        return parent_uf[static_cast<size_t>(x)];
+    };
+    auto Union = [&](Vertex u, Vertex v) {
+        Vertex ru = Find(u), rv = Find(v);
+        if (ru == rv) return;
+        parent_uf[static_cast<size_t>(rv)] = ru;
+        set_ancestor[static_cast<size_t>(ru)] = u;
+    };
+
+    std::function<void(Vertex)> TarjanLCA = [&](Vertex u) {
+        parent_uf[static_cast<size_t>(u)] = u;
+        set_ancestor[static_cast<size_t>(u)] = u;
+        for (Vertex v : children[static_cast<size_t>(u)]) {
+            TarjanLCA(v);
+            Union(u, v);
+            set_ancestor[static_cast<size_t>(Find(u))] = u;
+        }
+        visited[static_cast<size_t>(u)] = 1;
+        for (const auto& [v, idx] : q_by_node[static_cast<size_t>(u)]) {
+            if (visited[static_cast<size_t>(v)])
+                result[idx] = set_ancestor[static_cast<size_t>(Find(v))];
+        }
+    };
+
+    TarjanLCA(centre_);
+    return result;
 }
 
 std::optional<Weight> Graph::max_on_path_to_ancestor(Vertex u, Vertex a) const {
@@ -469,6 +538,45 @@ std::optional<Weight> Graph::max_on_path_to_ancestor(Vertex u, Vertex a) const {
     }
     if (current != a) return std::nullopt;  // a n'est pas ancêtre de u
     return result;
+}
+
+std::optional<Weight> Graph::itineraries_v2(Vertex u, Vertex v) const {
+    if (!center_valid_ || !is_alive(u) || !is_alive(v)) return std::nullopt;
+    auto L = lca(u, v);
+    if (!L) return std::nullopt;
+    auto mu = max_on_path_to_ancestor(u, *L);
+    auto mv = max_on_path_to_ancestor(v, *L);
+    if (!mu || !mv) return std::nullopt;
+    return (*mu > *mv) ? *mu : *mv;
+}
+
+void Graph::preprocess_itineraries_v3(const std::vector<std::pair<Vertex, Vertex>>& queries) {
+    max_path_table_.clear();
+    if (!center_valid_) return;
+    auto lca_results = tarjan_lca(queries);
+    for (size_t i = 0; i < queries.size(); ++i) {
+        Vertex u = queries[i].first, v = queries[i].second;
+        if (!is_alive(u) || !is_alive(v)) continue;
+        auto L = lca_results[i];
+        if (!L) continue;
+        auto mu = max_on_path_to_ancestor(u, *L);
+        auto mv = max_on_path_to_ancestor(v, *L);
+        Weight w = 0;
+        if (mu && mv) w = (*mu > *mv) ? *mu : *mv;
+        else if (mu) w = *mu;
+        else if (mv) w = *mv;
+        Vertex a = (u < v) ? u : v;
+        Vertex b = (u < v) ? v : u;
+        max_path_table_[{a, b}] = w;
+    }
+}
+
+std::optional<Weight> Graph::itineraries_v3(Vertex u, Vertex v) const {
+    Vertex a = (u < v) ? u : v;
+    Vertex b = (u < v) ? v : u;
+    auto it = max_path_table_.find({a, b});
+    if (it == max_path_table_.end()) return std::nullopt;
+    return it->second;
 }
 
 Vertex Graph::add_vertex() {
@@ -495,6 +603,7 @@ void Graph::delete_edge(Vertex u, Vertex v, std::optional<Weight> w)
 {
     assert(0 <= u && u < num_vertices() && 0 <= v && v < num_vertices());
     center_valid_ = false;
+    max_path_table_.clear();
     auto match = [&](const std::pair<Vertex, Weight>& e) {
         if (e.first != v) return false;
         if (!w) return true;

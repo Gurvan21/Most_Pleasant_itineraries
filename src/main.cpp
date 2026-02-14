@@ -1,8 +1,10 @@
 #include "Graph.h"
+#include "ItinerariesTest.h"
 #include <cassert>
 #include <sstream>
 #include <algorithm>
 #include <cmath>
+#include <iostream>
 
 
 static bool has_edge(const Graph& g, int u, int v, double w, double eps=1e-12) {
@@ -21,7 +23,19 @@ static int count_edges_to(const Graph& g, int u, int v) {
     return c;
 }
 
-int main() {
+int main(int argc, char** argv) {
+    if (argc >= 2) {
+        std::string path = argv[1];
+        auto test = ItinerariesTest::load_from_file(path);
+        if (test) {
+            std::cout << "Fichier : " << path << "\n";
+            test->run_and_compare_times();
+            return 0;
+        }
+        std::cerr << "Échec chargement " << path << "\n";
+        return 1;
+    }
+
     std::cout << "Programme démarré.\n" << std::flush;
 
     /*{
@@ -84,20 +98,20 @@ int main() {
         mst_p.write_dot_file("output/mst_prim.dot", "MST_Prim");
         std::cout << "MST (Prim) exporté : output/mst_prim.dot\n";
 
-        // --- Test max_on_path sur l'arbre MST (Prim) ---
+        // --- Test itineraries_v1 sur l'arbre MST (Prim) ---
         std::cout << "\n--- Max sur le chemin (arbre MST) ---\n";
-        auto m1 = mst_p.max_on_path(0, 2);
-        auto m2 = mst_p.max_on_path(0, 3);
-        auto m3 = mst_p.max_on_path(1, 4);
-        auto m_same = mst_p.max_on_path(0, 0);
-        if (m1) std::cout << "max_on_path(0, 2) = " << *m1 << "\n";
-        else    std::cout << "max_on_path(0, 2) = (non connectés)\n";
-        if (m2) std::cout << "max_on_path(0, 3) = " << *m2 << "\n";
-        else    std::cout << "max_on_path(0, 3) = (non connectés)\n";
-        if (m3) std::cout << "max_on_path(1, 4) = " << *m3 << "\n";
-        else    std::cout << "max_on_path(1, 4) = (non connectés)\n";
-        if (m_same) std::cout << "max_on_path(0, 0) = " << *m_same << " (chemin vide)\n";
-        else        std::cout << "max_on_path(0, 0) = (non connectés)\n";
+        auto m1 = mst_p.itineraries_v1(0, 2);
+        auto m2 = mst_p.itineraries_v1(0, 3);
+        auto m3 = mst_p.itineraries_v1(1, 4);
+        auto m_same = mst_p.itineraries_v1(0, 0);
+        if (m1) std::cout << "itineraries_v1(0, 2) = " << *m1 << "\n";
+        else    std::cout << "itineraries_v1(0, 2) = (non connectés)\n";
+        if (m2) std::cout << "itineraries_v1(0, 3) = " << *m2 << "\n";
+        else    std::cout << "itineraries_v1(0, 3) = (non connectés)\n";
+        if (m3) std::cout << "itineraries_v1(1, 4) = " << *m3 << "\n";
+        else    std::cout << "itineraries_v1(1, 4) = (non connectés)\n";
+        if (m_same) std::cout << "itineraries_v1(0, 0) = " << *m_same << " (chemin vide)\n";
+        else        std::cout << "itineraries_v1(0, 0) = (non connectés)\n";
 
         // --- Centre, parent, LCA (arbre MST) ---
         std::cout << "\n--- Centre, parent, LCA (arbre MST) ---\n";
@@ -121,6 +135,58 @@ int main() {
             auto r2 = mst_p.max_on_path_to_ancestor(4, 0);   // 4 -> 0, max = 1.5
             if (r1) std::cout << "max_on_path_to_ancestor(2, 0) = " << *r1 << "\n";
             if (r2) std::cout << "max_on_path_to_ancestor(4, 0) = " << *r2 << "\n";
+
+            // --- Test itineraries_v2 : doit égaler itineraries_v1 pour toute paire ---
+            std::cout << "\n--- Test itineraries_v2 (vs itineraries_v1) ---\n";
+            bool ok = true;
+            for (int u = 0; u < mst_p.num_vertices(); ++u) {
+                if (!mst_p.is_alive(u)) continue;
+                for (int v = 0; v < mst_p.num_vertices(); ++v) {
+                    if (!mst_p.is_alive(v)) continue;
+                    auto old_val = mst_p.itineraries_v1(u, v);
+                    auto new_val = mst_p.itineraries_v2(u, v);
+                    if (old_val != new_val) {
+                        std::cout << "  Différence (" << u << "," << v << "): v1=";
+                        if (old_val) std::cout << *old_val; else std::cout << "null";
+                        std::cout << " v2=";
+                        if (new_val) std::cout << *new_val; else std::cout << "null";
+                        std::cout << "\n";
+                        ok = false;
+                    }
+                }
+            }
+            if (ok) std::cout << "  OK : itineraries_v1 et itineraries_v2 coïncident.\n";
+
+            // --- Test Tarjan LCA (hors-ligne) ---
+            std::vector<std::pair<Vertex, Vertex>> qs = {{0, 2}, {1, 4}, {3, 3}, {2, 4}};
+            auto tarjan_ans = mst_p.tarjan_lca(qs);
+            std::cout << "\n--- Tarjan LCA (hors-ligne) ---\n";
+            for (size_t i = 0; i < qs.size(); ++i) {
+                auto ref = mst_p.lca(qs[i].first, qs[i].second);
+                std::cout << "  LCA(" << qs[i].first << "," << qs[i].second << ") = ";
+                if (tarjan_ans[i]) std::cout << *tarjan_ans[i]; else std::cout << "null";
+                std::cout << (tarjan_ans[i] == ref ? " (OK)" : " [diff]") << "\n";
+            }
+
+            // --- Itineraries v3 : précalcul Tarjan + table (requêtes en O(1)) ---
+            std::cout << "\n--- Itineraries v3 (most pleasant itineraries) ---\n";
+            std::vector<std::pair<Vertex, Vertex>> P;
+            for (int u = 0; u < mst_p.num_vertices(); ++u)
+                if (mst_p.is_alive(u))
+                    for (int v = u; v < mst_p.num_vertices(); ++v)
+                        if (mst_p.is_alive(v))
+                            P.emplace_back(u, v);
+            mst_p.preprocess_itineraries_v3(P);
+            std::cout << "Prétraitement pour |P| = " << P.size() << " requêtes (linéaire en n + |P|).\n";
+            bool ok_final = true;
+            for (const auto& [u, v] : P) {
+                auto ref_w = mst_p.itineraries_v1(u, v);
+                auto tab_w = mst_p.itineraries_v3(u, v);
+                if (ref_w != tab_w) ok_final = false;
+            }
+            std::cout << "Réponses en O(1) en moyenne : " << (ok_final ? "toutes cohérentes avec itineraries_v1.\n" : "erreur.\n");
+            std::cout << "Exemples itineraries_v3(0,2) = " << *mst_p.itineraries_v3(0, 2)
+                      << ", itineraries_v3(1,4) = " << *mst_p.itineraries_v3(1, 4) << "\n";
         }
     }
 

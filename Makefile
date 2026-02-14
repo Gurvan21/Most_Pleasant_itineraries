@@ -98,3 +98,10 @@ run: all
 	@echo "=== Exécution de $(OUTPUTMAIN) ==="
 	./$(OUTPUTMAIN)
 	@echo "=== Fin d'exécution ==="
+
+# Exemple : make test RUN=0  (fichier tests/itineraries.0.in)
+# Sans argument : lance sur tests/itineraries.0.in
+test: all
+	@echo "=== Test itineraries (fichier: $(or $(RUN),0)) ==="
+	./$(OUTPUTMAIN) tests/itineraries.$(or $(RUN),0).in
+	@echo "=== Fin test ==="

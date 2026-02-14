@@ -2,6 +2,7 @@
 #define GRAPH_H_INCLUDED
 
 #include <functional>
+#include <unordered_map>
 #include <vector>
 #include <iostream>
 #include <optional>
@@ -13,6 +14,14 @@ using Vertex = int;
 using Weight = double;
 /** Arête : (origine, destination, poids). Pour Kruskal / listes d'arêtes. */
 using Edge = std::tuple<Vertex, Vertex, Weight>;
+
+struct PairHash {
+    std::size_t operator()(const std::pair<Vertex, Vertex>& p) const {
+        const Vertex a = p.first < p.second ? p.first : p.second;
+        const Vertex b = p.first < p.second ? p.second : p.first;
+        return std::size_t(a) * 1000000007ULL + std::size_t(b);
+    }
+};
 
 class Graph
 {
@@ -51,9 +60,8 @@ public:
     /** Prim depuis start : graphe contenant uniquement les arêtes de l'arbre couvrant minimal. */
     Graph prim(Vertex start) const;
 
-    /** Maximum des poids d'arêtes sur l'unique chemin entre u et v (graphe supposé arbre).
-        Retourne std::nullopt si u et v ne sont pas connectés ; si u == v, retourne 0 (chemin vide). */
-    std::optional<Weight> max_on_path(Vertex u, Vertex v) const;
+    /** Itineraries v1 : max des poids sur le chemin (u,v) par DFS. */
+    std::optional<Weight> itineraries_v1(Vertex u, Vertex v) const;
 
     // --- Arbre : centre, parent, LCA (graphe supposé non orienté et connexe = arbre) ---
     /** Calcule le centre (milieu du diamètre), le diamètre et remplit le tableau parent.
@@ -69,8 +77,17 @@ public:
     Vertex get_parent(Vertex v) const;
     /** Plus bas ancêtre commun de u et v. Précondition : has_center(), u et v vivants. */
     std::optional<Vertex> lca(Vertex u, Vertex v) const;
+    /** Tarjan LCA hors-ligne : répond à toutes les requêtes dans P en O(n + |P|). Retourne les réponses dans le même ordre que les paires (u,v). */
+    std::vector<std::optional<Vertex>> tarjan_lca(const std::vector<std::pair<Vertex, Vertex>>& queries) const;
     /** Max des poids d'arêtes sur le chemin de u vers l'ancêtre a (a doit être ancêtre de u). O(log n). */
     std::optional<Weight> max_on_path_to_ancestor(Vertex u, Vertex a) const;
+    /** Itineraries v2 : max sur le chemin (u,v) via LCA + max_on_path_to_ancestor. Précondition : has_center(). */
+    std::optional<Weight> itineraries_v2(Vertex u, Vertex v) const;
+
+    /** Précalcul Itineraries v3 (Tarjan + max) pour l'ensemble P. À appeler une fois quand P est connu à l'avance. */
+    void preprocess_itineraries_v3(const std::vector<std::pair<Vertex, Vertex>>& queries);
+    /** Itineraries v3 : réponse en O(1) en moyenne après preprocess_itineraries_v3. */
+    std::optional<Weight> itineraries_v3(Vertex u, Vertex v) const;
 
     // --- Affichage / observation ---
     /** Liste d'adjacence (sommets vivants uniquement). */
@@ -101,6 +118,9 @@ private:
     std::vector<std::vector<Vertex>> up_;      // up_[v][k] = 2^k-ième ancêtre de v
     std::vector<std::vector<Weight>> max_up_;  // max_up_[v][k] = max sur le chemin v -> up_[v][k]
     int diameter_length_ = -1;
+
+    // Table des réponses prétraitées (most pleasant itineraries via Tarjan)
+    std::unordered_map<std::pair<Vertex, Vertex>, Weight, PairHash> max_path_table_;
 
     void build_binary_lifting(int n);
 };
