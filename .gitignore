@@ -1,0 +1,24 @@
+# Binaires et objets C++
+output/main
+output/main.exe
+*.o
+*.d
+
+# LaTeX
+doc/*.aux
+doc/*.log
+doc/*.out
+doc/*.synctex.gz
+doc/*.fls
+doc/*.fdb_latexmk
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# IDE / éditeur
+.vscode/
+.idea/
+*~

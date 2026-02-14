@@ -1,0 +1,99 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\title{Maximum sur le chemin entre deux sommets dans un arbre}
+\author{Most Pleasant Itineraries}
+\date{}
+
+\newtheorem{prop}{Proposition}
+\newtheorem{preuve}{Preuve}
+
+\begin{document}
+\maketitle
+
+\section{Problème}
+
+Soit $T = (V, E)$ un \textbf{arbre} (graphe connexe sans cycle) dont les arêtes sont pondérées par un poids $w : E \to \mathbb{R}$. Étant donnés deux sommets $u, v \in V$, il existe exactement \textbf{un chemin} entre $u$ et $v$. On souhaite calculer le \textbf{maximum des poids des arêtes} le long de ce chemin :
+\[
+  \mathrm{max\_on\_path}(u, v) = \max\bigl\{ w(e) : e \in \text{chemin}(u,v) \bigr\}.
+\]
+
+\section{Principe de l'algorithme}
+
+On effectue un \textbf{parcours en profondeur (DFS)} depuis $u$ en direction de $v$, en maintenant le maximum des poids rencontrés le long du chemin courant. Dès que l'on atteint $v$, on renvoie ce maximum.
+
+\subsection{Éviter de remonter}
+
+Le graphe est représenté par une \textbf{liste d'adjacence} (non orientée) : chaque sommet a la liste de \textbf{tous} ses voisins. Lorsqu'on est en un sommet \texttt{current}, les voisins incluent donc le sommet par lequel on est arrivé (le « parent » sur le chemin). Si l'on explorait tous les voisins sans restriction, on repasserait par ce parent et on bouclerait. Pour simuler un parcours « uniquement vers l'avant », on transmet à chaque appel récursif le sommet \texttt{from} d'où l'on vient et on \textbf{ignore} le voisin égal à \texttt{from}.
+
+\subsection{Cas particuliers}
+
+\begin{itemize}[leftmargin=*]
+  \item Si $u = v$, le chemin est vide ; on peut convenir de renvoyer $-\infty$ (ou une valeur par défaut).
+  \item Si $u$ et $v$ ne sont pas dans la même composante connexe (graphe non connexe), il n'y a pas de chemin ; on renvoie une valeur absente (\texttt{std::optional} ou sentinelle).
+\end{itemize}
+
+\section{Pseudocode}
+
+\begin{algorithm}[H]
+\caption{Maximum sur le chemin entre $u$ et $v$ dans un arbre}
+\begin{algorithmic}[1]
+\Function{max\_on\_path}{$T$, $u$, $v$}
+  \State \Return \Call{dfs\_path}{$T$, $u$, $v$, $\mathtt{from} \gets -1$, $\mathtt{path\_max} \gets -\infty$}
+\EndFunction
+\State
+\Function{dfs\_path}{$T$, $\mathtt{current}$, $\mathtt{target}$, $\mathtt{from}$, $\mathtt{path\_max}$}
+  \If{$\mathtt{current} = \mathtt{target}$}
+    \State \Return $\mathtt{path\_max}$
+  \EndIf
+  \For{chaque $(\mathtt{voisin}, \mathtt{poids})$ dans $T.\mathtt{voisins}(\mathtt{current})$}
+    \If{$\mathtt{voisin} = \mathtt{from}$}
+      \State \textbf{continuer} \Comment{ne pas remonter vers le parent}
+    \EndIf
+    \State $\mathtt{nouveau\_max} \gets \max(\mathtt{path\_max}, \mathtt{poids})$
+    \State $\mathtt{resultat} \gets$ \Call{dfs\_path}{$T$, $\mathtt{voisin}$, $\mathtt{target}$, $\mathtt{current}$, $\mathtt{nouveau\_max}$}
+    \If{$\mathtt{resultat} \neq \mathtt{non\_trouvé}$}
+      \State \Return $\mathtt{resultat}$
+    \EndIf
+  \EndFor
+  \State \Return $\mathtt{non\_trouvé}$
+\EndFunction
+\end{algorithmic}
+\end{algorithm}
+
+\section{Preuve de correction et terminaison}
+
+\subsection{Terminaison}
+
+À chaque appel récursif, on se déplace de \texttt{current} vers un voisin $\neq$ \texttt{from}, donc on ajoute une arête au chemin parcouru. Le graphe est un \textbf{arbre} : il n'y a pas de cycle. Donc on ne peut pas repasser par un sommet déjà visité sur le chemin courant. Le nombre de sommets étant fini, la chaîne d'appels récursifs est finie. Soit on atteint \texttt{target} (ligne 8--9), soit on épuise les voisins sans trouver \texttt{target} (ligne 18). Dans les deux cas, l'algorithme termine.
+
+\subsection{Correction}
+
+\begin{prop}
+Si $u$ et $v$ sont dans la même composante connexe de $T$, l'algorithme renvoie le maximum des poids des arêtes sur l'unique chemin entre $u$ et $v$.
+\end{prop}
+
+\begin{preuve}
+On montre par récurrence (sur la structure de l'arbre) que \texttt{dfs\_path}$(T, u, v, -1, -\infty)$ explore exactement l'unique chemin de $u$ à $v$ sans le parcourir deux fois.
+
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Cas de base :} $u = v$. On renvoie $\mathtt{path\_max} = -\infty$ (chemin vide), ce qui est une convention cohérente.
+  \item \textbf{Étape :} $u \neq v$. Il existe une unique arête $\{u, u_1\}$ sur le chemin de $u$ à $v$. Pour tout autre voisin $w$ de $u$, $v$ n'est pas dans la composante de $w$ après suppression de $u$ (car c'est un arbre). Donc \texttt{dfs\_path} ne trouvera $v$ que via le voisin $u_1$. En ignorant \texttt{from}, on n'explore pas deux fois la même arête. Ainsi, le chemin suivi est bien le chemin unique $u \to u_1 \to \cdots \to v$, et $\mathtt{path\_max}$ est mis à jour à chaque arête. Au moment où \texttt{current} $= v$, $\mathtt{path\_max}$ vaut donc le maximum des poids des arêtes du chemin.
+\end{itemize}
+\end{preuve}
+
+\section{Complexité}
+
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Temps :} $O(n)$ où $n = |V|$. Chaque sommet du chemin de $u$ à $v$ est visité au plus une fois ; pour chaque sommet visité, on parcourt la liste de ses voisins, mais chaque arête de l'arbre est vue au plus deux fois (une fois par extrémité). Au total $O(n + (n-1)) = O(n)$ pour un arbre à $n$ sommets.
+  \item \textbf{Espace :} $O(n)$ pour la pile d'appels récursifs (hauteur de l'arbre au pire $n-1$). Pas de tableau « visité » supplémentaire.
+\end{itemize}
+
+\end{document}
