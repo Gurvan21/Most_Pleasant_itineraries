@@ -1,0 +1,5 @@
+n = 200000, |P| = 500000
+  itineraries_v1 : (ignoré, SKIP_V1=1)
+  itineraries_v2 : prétraitement 2041.428 ms + requêtes 2430.465 ms = total 4471.893 ms
+  itineraries_v3 : prétraitement 3234.135 ms + requêtes 345.541 ms = total 3579.677 ms
+  Résultats identiques : oui
