@@ -63,10 +63,9 @@ Les fichiers `.dot` peuvent aussi être ouverts sur [graphviz.org](https://graph
 
 ## Documentation
 
-- **Maximum sur le chemin dans un arbre :** principe, pseudocode, preuve de correction, terminaison et complexité dans `doc/max_on_path_tree.tex`. Compilation PDF :
-  ```bash
-  cd doc && pdflatex max_on_path_tree.tex
-  ```
+- **Documentation technique complète (classes `Graph` et `ItinerariesTest`) :** `doc/DOCUMENTATION.md` — API, complexités, format des fichiers, scripts.
+- **Rapport du projet (preuves, algorithmes) :** `doc/projet.tex`. Compilation PDF : `cd doc && pdflatex projet.tex`
+- **Maximum sur le chemin dans un arbre :** `doc/max_on_path_tree.tex`. Compilation PDF : `cd doc && pdflatex max_on_path_tree.tex`
 
 ## Licence
 
