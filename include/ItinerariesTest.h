@@ -8,6 +8,15 @@
 #include <string>
 #include <vector>
 
+/** Résultats et runtimes après run_and_compare_times (pour rapport). */
+struct ItinerariesRuntimes {
+    double v1_ms = 0;
+    double v2_total_ms = 0;
+    double v3_total_ms = 0;
+    bool timeout = false;
+    bool results_identical = false;
+};
+
 /** Charge un graphe (arbre) et des requêtes depuis un fichier, exécute les 3 méthodes
  *  itineraries_v1, v2, v3 et compare les temps. */
 class ItinerariesTest
@@ -23,8 +32,12 @@ public:
     const Graph& graph() const { return tree_; }
     const std::vector<std::pair<Vertex, Vertex>>& queries() const { return queries_; }
 
-    /** Exécute les 3 méthodes sur toutes les requêtes, vérifie que les résultats coïncident, affiche les temps (ms). */
-    void run_and_compare_times(std::ostream& out = std::cout) const;
+    /** Exécute les 3 méthodes sur toutes les requêtes, vérifie que les résultats coïncident, affiche les temps (ms).
+     *  Si answers_path est fourni, écrit une ligne par requête (entier = max sur le chemin, arrondi) pour itineraries.out.
+     *  Si runtimes_out est fourni, y écrit v1_ms, v2_total_ms, v3_total_ms (pour parsing par script). */
+    void run_and_compare_times(std::ostream& out = std::cout,
+                               const std::optional<std::string>& answers_path = std::nullopt,
+                               ItinerariesRuntimes* runtimes_out = nullptr) const;
 
 private:
     Graph tree_;

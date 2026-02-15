@@ -1,4 +1,6 @@
 #include "ItinerariesTest.h"
+#include <cmath>
+#include <cstdlib>
 #include <fstream>
 #include <iomanip>
 #include <sstream>
@@ -41,7 +43,13 @@ std::optional<ItinerariesTest> ItinerariesTest::load_from_file(const std::string
     return ItinerariesTest(std::move(g), std::move(queries));
 }
 
-void ItinerariesTest::run_and_compare_times(std::ostream& out) const {
+namespace {
+constexpr double QUERY_TIMEOUT_MS = 30000.0;  // N/A si une requête dépasse 30 s
+}
+
+void ItinerariesTest::run_and_compare_times(std::ostream& out,
+                                             const std::optional<std::string>& answers_path,
+                                             ItinerariesRuntimes* runtimes_out) const {
     if (queries_.empty()) {
         out << "Aucune requête.\n";
         return;
@@ -51,51 +59,118 @@ void ItinerariesTest::run_and_compare_times(std::ostream& out) const {
 
     std::vector<std::optional<Weight>> res_v1(queries_.size()), res_v2(queries_.size()), res_v3(queries_.size());
     const int n = tree_.num_vertices();
+    const bool skip_v1 = (std::getenv("SKIP_V1") && std::atoi(std::getenv("SKIP_V1")) != 0);
 
-    // --- v1 : pas de prétraitement, uniquement les requêtes ---
-    Graph g1 = tree_;
-    auto t0 = Clock::now();
-    for (size_t i = 0; i < queries_.size(); ++i)
-        res_v1[i] = g1.itineraries_v1(queries_[i].first, queries_[i].second);
-    auto t1 = Clock::now();
-    double ms_v1 = std::chrono::duration_cast<Ms>(t1 - t0).count();
+    // --- v1 : temps par requête (sauté si SKIP_V1=1 pour les gros tests) ---
+    double ms_v1_total = 0;
+    out << "RUNTIME_V1_QUERIES_START\n";
+    if (!skip_v1) {
+        Graph g1 = tree_;
+        for (size_t i = 0; i < queries_.size(); ++i) {
+            auto t0 = Clock::now();
+            res_v1[i] = g1.itineraries_v1(queries_[i].first, queries_[i].second);
+            auto t1 = Clock::now();
+            double ms = std::chrono::duration_cast<Ms>(t1 - t0).count();
+            ms_v1_total += ms;
+            if (ms >= QUERY_TIMEOUT_MS)
+                out << "N/A\n";
+            else
+                out << std::fixed << std::setprecision(6) << ms << "\n";
+        }
+    }
+    out << "RUNTIME_V1_QUERIES_END\n";
 
-    // --- v2 : prétraitement (centre + parent + binary lifting) puis requêtes ---
+    // --- v2 : prétraitement puis temps par requête ---
     Graph g2 = tree_;
-    auto t2_start = Clock::now();
+    auto t2_pre0 = Clock::now();
     g2.compute_center_and_parent();
-    auto t2_pre_end = Clock::now();
+    auto t2_pre1 = Clock::now();
+    double ms_pre_v2 = std::chrono::duration_cast<Ms>(t2_pre1 - t2_pre0).count();
     if (!g2.has_center()) {
         out << "Erreur : compute_center_and_parent a échoué (graphe non connexe ?).\n";
         return;
     }
-    for (size_t i = 0; i < queries_.size(); ++i)
+    out << "RUNTIME_V2_PREPROCESSING " << std::fixed << std::setprecision(6) << ms_pre_v2 << "\n";
+    double ms_v2_queries_total = 0;
+    out << "RUNTIME_V2_QUERIES_START\n";
+    for (size_t i = 0; i < queries_.size(); ++i) {
+        auto t0 = Clock::now();
         res_v2[i] = g2.itineraries_v2(queries_[i].first, queries_[i].second);
-    auto t2_end = Clock::now();
-    double ms_pre_v2 = std::chrono::duration_cast<Ms>(t2_pre_end - t2_start).count();
-    double ms_queries_v2 = std::chrono::duration_cast<Ms>(t2_end - t2_pre_end).count();
-    double ms_v2_total = ms_pre_v2 + ms_queries_v2;
+        auto t1 = Clock::now();
+        double ms = std::chrono::duration_cast<Ms>(t1 - t0).count();
+        ms_v2_queries_total += ms;
+        if (ms >= QUERY_TIMEOUT_MS)
+            out << "N/A\n";
+        else
+            out << std::fixed << std::setprecision(6) << ms << "\n";
+    }
+    out << "RUNTIME_V2_QUERIES_END\n";
+    double ms_v2_total = ms_pre_v2 + ms_v2_queries_total;
 
-    // --- v3 : prétraitement (Tarjan + table) puis requêtes (réutilise le centre de g2) ---
-    auto t3_pre_start = Clock::now();
-    g2.preprocess_itineraries_v3(queries_);
-    auto t3_pre_end = Clock::now();
-    for (size_t i = 0; i < queries_.size(); ++i)
+    // --- v3 : prétraitement puis temps par requête ---
+    double ms_pre_v3 = 0;
+    {
+        auto t0 = Clock::now();
+        g2.preprocess_itineraries_v3(queries_);
+        auto t1 = Clock::now();
+        ms_pre_v3 = std::chrono::duration_cast<Ms>(t1 - t0).count();
+    }
+    out << "RUNTIME_V3_PREPROCESSING " << std::fixed << std::setprecision(6) << ms_pre_v3 << "\n";
+    double ms_v3_queries_total = 0;
+    out << "RUNTIME_V3_QUERIES_START\n";
+    for (size_t i = 0; i < queries_.size(); ++i) {
+        auto t0 = Clock::now();
         res_v3[i] = g2.itineraries_v3(queries_[i].first, queries_[i].second);
-    auto t3_end = Clock::now();
-    double ms_pre_v3 = std::chrono::duration_cast<Ms>(t3_pre_end - t3_pre_start).count();
-    double ms_queries_v3 = std::chrono::duration_cast<Ms>(t3_end - t3_pre_end).count();
-    double ms_v3_total = ms_pre_v3 + ms_queries_v3;
+        auto t1 = Clock::now();
+        double ms = std::chrono::duration_cast<Ms>(t1 - t0).count();
+        ms_v3_queries_total += ms;
+        if (ms >= QUERY_TIMEOUT_MS)
+            out << "N/A\n";
+        else
+            out << std::fixed << std::setprecision(6) << ms << "\n";
+    }
+    out << "RUNTIME_V3_QUERIES_END\n";
+    double ms_v3_total = ms_pre_v3 + ms_v3_queries_total;
 
     bool ok = true;
-    for (size_t i = 0; i < queries_.size(); ++i) {
-        if (res_v1[i] != res_v2[i] || res_v1[i] != res_v3[i]) ok = false;
+    if (skip_v1) {
+        for (size_t i = 0; i < queries_.size(); ++i) {
+            if (res_v2[i] != res_v3[i]) ok = false;
+        }
+    } else {
+        for (size_t i = 0; i < queries_.size(); ++i) {
+            if (res_v1[i] != res_v2[i] || res_v1[i] != res_v3[i]) ok = false;
+        }
+    }
+
+    if (runtimes_out) {
+        runtimes_out->v1_ms = ms_v1_total;
+        runtimes_out->v2_total_ms = ms_v2_total;
+        runtimes_out->v3_total_ms = ms_v3_total;
+        runtimes_out->results_identical = ok;
+    }
+
+    if (answers_path) {
+        std::ofstream f(*answers_path);
+        if (f) {
+            const auto& ref = skip_v1 ? res_v2 : res_v1;
+            for (size_t i = 0; i < queries_.size(); ++i) {
+                const auto& r = ref[i];
+                if (r)
+                    f << static_cast<int>(std::round(*r)) << "\n";
+                else
+                    f << "-1\n";
+            }
+        }
     }
 
     out << "n = " << n << ", |P| = " << queries_.size() << "\n";
     out << std::fixed << std::setprecision(3);
-    out << "  itineraries_v1 : " << ms_v1 << " ms (requêtes uniquement, pas de prétraitement)\n";
-    out << "  itineraries_v2 : prétraitement " << ms_pre_v2 << " ms + requêtes " << ms_queries_v2 << " ms = total " << ms_v2_total << " ms\n";
-    out << "  itineraries_v3 : prétraitement " << ms_pre_v3 << " ms + requêtes " << ms_queries_v3 << " ms = total " << ms_v3_total << " ms\n";
+    if (skip_v1)
+        out << "  itineraries_v1 : (ignoré, SKIP_V1=1)\n";
+    else
+        out << "  itineraries_v1 : " << ms_v1_total << " ms (requêtes uniquement, pas de prétraitement)\n";
+    out << "  itineraries_v2 : prétraitement " << ms_pre_v2 << " ms + requêtes " << ms_v2_queries_total << " ms = total " << ms_v2_total << " ms\n";
+    out << "  itineraries_v3 : prétraitement " << ms_pre_v3 << " ms + requêtes " << ms_v3_queries_total << " ms = total " << ms_v3_total << " ms\n";
     out << "  Résultats identiques : " << (ok ? "oui" : "non") << "\n";
 }

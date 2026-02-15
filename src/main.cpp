@@ -5,6 +5,21 @@
 #include <algorithm>
 #include <cmath>
 #include <iostream>
+#include <string>
+
+/** Déduit le nom du fichier .out : tests/itineraries.0.in -> itineraries.0.out */
+static std::string out_basename(const std::string& in_path) {
+    std::string name = in_path;
+    auto pos = name.find_last_of("/\\");
+    if (pos != std::string::npos)
+        name = name.substr(pos + 1);
+    auto dot = name.rfind(".in");
+    if (dot != std::string::npos)
+        name = name.substr(0, dot) + ".out";
+    else
+        name += ".out";
+    return name;
+}
 
 
 static bool has_edge(const Graph& g, int u, int v, double w, double eps=1e-12) {
@@ -26,10 +41,12 @@ static int count_edges_to(const Graph& g, int u, int v) {
 int main(int argc, char** argv) {
     if (argc >= 2) {
         std::string path = argv[1];
+        std::string output_dir = (argc >= 3) ? argv[2] : "outputItineraries";
         auto test = ItinerariesTest::load_from_file(path);
         if (test) {
             std::cout << "Fichier : " << path << "\n";
-            test->run_and_compare_times();
+            std::string out_path = output_dir + "/" + out_basename(path);
+            test->run_and_compare_times(std::cout, out_path, nullptr);
             return 0;
         }
         std::cerr << "Échec chargement " << path << "\n";
