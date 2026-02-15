@@ -7,7 +7,6 @@
 #include <iostream>
 #include <string>
 
-/** Déduit le nom du fichier .out : tests/itineraries.0.in -> itineraries.0.out */
 static std::string out_basename(const std::string& in_path) {
     std::string name = in_path;
     auto pos = name.find_last_of("/\\");
@@ -55,28 +54,6 @@ int main(int argc, char** argv) {
 
     std::cout << "Programme démarré.\n" << std::flush;
 
-    /*{
-        Graph g;
-        for (int i = 0; i < 5; ++i) g.add_vertex();
-        g.add_edge(0, 1, 2.0);
-        g.add_edge(1, 2, 1.0);
-        g.add_edge(2, 3, 4.0);
-        g.add_edge(3, 0, 1.0);
-        g.add_edge(0, 4, 1.5);
-        g.add_edge(4, 2, 2.5);
-        g.delete_edge(0,1);
-        g.remove_vertex(0);
-        g.add_vertex();
-
-        std::cout << "--- Résumé ---\n";
-        g.print_summary(std::cout);
-        std::cout << "--- Liste d'adjacence ---\n" << g;
-
-        g.write_dot_file("output/graph.dot", "Demo");
-        std::cout << "Fichiers générés : output/graph.dot (Graphviz), output/graph.html (navigateur)\n";
-    }*/
-
-    // --- Exemples DFS, BFS, Kruskal, Prim (graphe non orienté) ---
     {
         Graph g;
         for (int i = 0; i < 5; ++i) g.add_vertex();
@@ -115,7 +92,6 @@ int main(int argc, char** argv) {
         mst_p.write_dot_file("output/mst_prim.dot", "MST_Prim");
         std::cout << "MST (Prim) exporté : output/mst_prim.dot\n";
 
-        // --- Test itineraries_v1 sur l'arbre MST (Prim) ---
         std::cout << "\n--- Max sur le chemin (arbre MST) ---\n";
         auto m1 = mst_p.itineraries_v1(0, 2);
         auto m2 = mst_p.itineraries_v1(0, 3);
@@ -130,7 +106,6 @@ int main(int argc, char** argv) {
         if (m_same) std::cout << "itineraries_v1(0, 0) = " << *m_same << " (chemin vide)\n";
         else        std::cout << "itineraries_v1(0, 0) = (non connectés)\n";
 
-        // --- Centre, parent, LCA (arbre MST) ---
         std::cout << "\n--- Centre, parent, LCA (arbre MST) ---\n";
         mst_p.compute_center_and_parent();
         if (mst_p.has_center()) {
@@ -147,13 +122,11 @@ int main(int argc, char** argv) {
             if (l1) std::cout << "LCA(0, 2) = " << *l1 << "\n";
             if (l2) std::cout << "LCA(1, 4) = " << *l2 << "\n";
             if (l3) std::cout << "LCA(3, 3) = " << *l3 << "\n";
-            // max_on_path_to_ancestor (O(log n)) : u -> ancêtre a
-            auto r1 = mst_p.max_on_path_to_ancestor(2, 0);  // chemin 2 -> 1 -> 0, max = 2
-            auto r2 = mst_p.max_on_path_to_ancestor(4, 0);   // 4 -> 0, max = 1.5
+            auto r1 = mst_p.max_on_path_to_ancestor(2, 0);
+            auto r2 = mst_p.max_on_path_to_ancestor(4, 0);
             if (r1) std::cout << "max_on_path_to_ancestor(2, 0) = " << *r1 << "\n";
             if (r2) std::cout << "max_on_path_to_ancestor(4, 0) = " << *r2 << "\n";
 
-            // --- Test itineraries_v2 : doit égaler itineraries_v1 pour toute paire ---
             std::cout << "\n--- Test itineraries_v2 (vs itineraries_v1) ---\n";
             bool ok = true;
             for (int u = 0; u < mst_p.num_vertices(); ++u) {
@@ -174,7 +147,6 @@ int main(int argc, char** argv) {
             }
             if (ok) std::cout << "  OK : itineraries_v1 et itineraries_v2 coïncident.\n";
 
-            // --- Test Tarjan LCA (hors-ligne) ---
             std::vector<std::pair<Vertex, Vertex>> qs = {{0, 2}, {1, 4}, {3, 3}, {2, 4}};
             auto tarjan_ans = mst_p.tarjan_lca(qs);
             std::cout << "\n--- Tarjan LCA (hors-ligne) ---\n";
@@ -185,8 +157,7 @@ int main(int argc, char** argv) {
                 std::cout << (tarjan_ans[i] == ref ? " (OK)" : " [diff]") << "\n";
             }
 
-            // --- Itineraries v3 : précalcul Tarjan + table (requêtes en O(1)) ---
-            std::cout << "\n--- Itineraries v3 (most pleasant itineraries) ---\n";
+            std::cout << "\n--- Itineraries v3 ---\n";
             std::vector<std::pair<Vertex, Vertex>> P;
             for (int u = 0; u < mst_p.num_vertices(); ++u)
                 if (mst_p.is_alive(u))

@@ -66,50 +66,6 @@ void Graph::write_dot_file(const std::string& path, const std::string& name) con
     std::ofstream f(path);
     if (f) write_dot(f, name);
 }
-/* 
-void Graph::write_html_file(const std::string& path, const std::string& title) const {
-    std::vector<Vertex> nodes;
-    for (Vertex v = 0; v < num_vertices(); ++v)
-        if (alive[v]) nodes.push_back(v);
-    if (nodes.empty()) return;
-
-    const double cx = 250, cy = 250, r = 200;
-    const int n = static_cast<int>(nodes.size());
-    auto px = [&](int i) {
-        return cx + r * std::cos(2 * 3.14159265359 * i / n - 3.14159265359 / 2);
-    };
-    auto py = [&](int i) {
-        return cy + r * std::sin(2 * 3.14159265359 * i / n - 3.14159265359 / 2);
-    };
-
-    std::ostringstream svg;
-    svg << "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 500 500' width='500' height='500'>\n";
-    for (const auto& e : get_edges()) {
-        Vertex u = std::get<0>(e), v = std::get<1>(e);
-        Weight w = std::get<2>(e);
-        int iu = static_cast<int>(std::find(nodes.begin(), nodes.end(), u) - nodes.begin());
-        int iv = static_cast<int>(std::find(nodes.begin(), nodes.end(), v) - nodes.begin());
-        double x1 = px(iu), y1 = py(iu), x2 = px(iv), y2 = py(iv);
-        double mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
-        svg << "  <line x1='" << x1 << "' y1='" << y1 << "' x2='" << x2 << "' y2='" << y2
-            << "' stroke='#369' stroke-width='2'/>\n";
-        svg << "  <text x='" << mx << "' y='" << my << "' fill='#333' font-size='10' text-anchor='middle'>" << w << "</text>\n";
-    }
-    for (int i = 0; i < n; ++i) {
-        double x = px(i), y = py(i);
-        svg << "  <circle cx='" << x << "' cy='" << y << "' r='18' fill='#6ab' stroke='#248' stroke-width='2'/>\n";
-        svg << "  <text x='" << x << "' y='" << y << "' fill='white' font-size='12' text-anchor='middle' dominant-baseline='central'>" << nodes[i] << "</text>\n";
-    }
-    svg << "</svg>\n";
-
-    std::ofstream f(path);
-    if (!f) return;
-    f << "<!DOCTYPE html><html><head><meta charset='utf-8'><title>" << title << "</title></head><body>";
-    f << "<h1>" << title << "</h1>";
-    f << "<p>Sommets: " << n << " — Arêtes: " << num_edges() << " — " << (directed ? "Orienté" : "Non orienté") << "</p>";
-    f << svg.str();
-    f << "</body></html>\n";
-}*/
 void Graph::remove_vertex(Vertex v) {
     assert(0 <= v && v < num_vertices() && alive[v]);
     cont[v].clear();
@@ -273,7 +229,6 @@ Graph Graph::prim(Vertex start) const {
 }
 
 namespace {
-// Helper récursif : max des poids sur le chemin de current à target, en ne repassant pas par from.
 std::optional<Weight> max_on_path_dfs(const Graph& g, Vertex current, Vertex target,
                                       Vertex from, Weight path_max) {
     if (current == target) return path_max;
@@ -288,16 +243,13 @@ std::optional<Weight> max_on_path_dfs(const Graph& g, Vertex current, Vertex tar
 }  // namespace
 
 std::optional<Weight> Graph::itineraries_v1(Vertex u, Vertex v) const {
-    if (u == v) return 0;  // chemin vide
+    if (u == v) return 0;
     if (!is_alive(u) || !is_alive(v)) return std::nullopt;
-    // -1 n'est pas un sommet valide : pas de "from" au premier appel
     const Vertex no_from = -1;
     return max_on_path_dfs(*this, u, v, no_from, std::numeric_limits<Weight>::lowest());
 }
 
-// --- Centre, parent, LCA (arbre) ---
 namespace {
-// BFS depuis start ; retourne (sommet le plus éloigné, chemin start -> farthest).
 std::pair<Vertex, std::vector<Vertex>> farthest_and_path(const Graph& g, Vertex start) {
     const int n = g.num_vertices();
     std::vector<int> dist(static_cast<size_t>(n), -1);
@@ -353,7 +305,7 @@ void Graph::compute_center_and_parent() {
     }
     auto [u, path1] = farthest_and_path(*this, start);
     auto [v, path_diam] = farthest_and_path(*this, u);
-    const int L = static_cast<int>(path_diam.size()) - 1;  // nombre d'arêtes
+    const int L = static_cast<int>(path_diam.size()) - 1;
     if (L <= 0) {
         centre_ = path_diam.empty() ? start : path_diam[0];
         diameter_length_ = L;
@@ -447,25 +399,22 @@ std::optional<Vertex> Graph::lca(Vertex u, Vertex v) const {
     const int du = depth_[static_cast<size_t>(u)];
     const int dv = depth_[static_cast<size_t>(v)];
     if (du < 0 || dv < 0) return std::nullopt;
-    // up_[v][k] = 2^k-ième ancêtre de v (binary lifting, rempli par build_binary_lifting)
-    if (du < dv) std::swap(u, v);  // après : depth[u] >= depth[v]
+    if (du < dv) std::swap(u, v);
     int d = depth_[static_cast<size_t>(u)] - depth_[static_cast<size_t>(v)];
     const int max_k = static_cast<int>(up_[static_cast<size_t>(u)].size()) - 1;
-    // Binary lifting : remonter u de d pas en sauts 2^k (O(log n) au lieu de O(d))
     for (int k = max_k; k >= 0 && d > 0; --k)
         if (d >= (1 << k)) {
             u = up_[static_cast<size_t>(u)][static_cast<size_t>(k)];
             d -= (1 << k);
         }
     if (u == v) return u;
-    // Binary lifting : remonter u et v ensemble par paliers 2^k jusqu'à être juste sous le LCA
     for (int k = max_k; k >= 0; --k) {
         if (up_[static_cast<size_t>(u)][static_cast<size_t>(k)] != up_[static_cast<size_t>(v)][static_cast<size_t>(k)]) {
             u = up_[static_cast<size_t>(u)][static_cast<size_t>(k)];
             v = up_[static_cast<size_t>(v)][static_cast<size_t>(k)];
         }
     }
-    return up_[static_cast<size_t>(u)][0];  // parent commun = LCA
+    return up_[static_cast<size_t>(u)][0];
 }
 
 std::vector<std::optional<Vertex>> Graph::tarjan_lca(const std::vector<std::pair<Vertex, Vertex>>& queries) const {
@@ -526,7 +475,7 @@ std::optional<Weight> Graph::max_on_path_to_ancestor(Vertex u, Vertex a) const {
     const int du = depth_[static_cast<size_t>(u)];
     const int da = depth_[static_cast<size_t>(a)];
     int d = du - da;
-    if (d <= 0) return std::nullopt;  // a n'est pas un ancêtre (ou u == a déjà traité)
+    if (d <= 0) return std::nullopt;
     const int max_k = static_cast<int>(up_[static_cast<size_t>(u)].size()) - 1;
     Weight result = std::numeric_limits<Weight>::lowest();
     Vertex current = u;
@@ -538,7 +487,7 @@ std::optional<Weight> Graph::max_on_path_to_ancestor(Vertex u, Vertex a) const {
             d -= (1 << k);
         }
     }
-    if (current != a) return std::nullopt;  // a n'est pas ancêtre de u
+    if (current != a) return std::nullopt;
     return result;
 }
 

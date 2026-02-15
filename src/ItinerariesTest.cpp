@@ -44,7 +44,7 @@ std::optional<ItinerariesTest> ItinerariesTest::load_from_file(const std::string
 }
 
 namespace {
-constexpr double QUERY_TIMEOUT_MS = 30000.0;  // N/A si une requête dépasse 30 s
+constexpr double QUERY_TIMEOUT_MS = 30000.0;
 }
 
 void ItinerariesTest::run_and_compare_times(std::ostream& out,
@@ -61,7 +61,6 @@ void ItinerariesTest::run_and_compare_times(std::ostream& out,
     const int n = tree_.num_vertices();
     const bool skip_v1 = (std::getenv("SKIP_V1") && std::atoi(std::getenv("SKIP_V1")) != 0);
 
-    // --- v1 : temps par requête (sauté si SKIP_V1=1 pour les gros tests) ---
     double ms_v1_total = 0;
     out << "RUNTIME_V1_QUERIES_START\n";
     if (!skip_v1) {
@@ -80,7 +79,6 @@ void ItinerariesTest::run_and_compare_times(std::ostream& out,
     }
     out << "RUNTIME_V1_QUERIES_END\n";
 
-    // --- v2 : prétraitement puis temps par requête ---
     Graph g2 = tree_;
     auto t2_pre0 = Clock::now();
     g2.compute_center_and_parent();
@@ -107,7 +105,6 @@ void ItinerariesTest::run_and_compare_times(std::ostream& out,
     out << "RUNTIME_V2_QUERIES_END\n";
     double ms_v2_total = ms_pre_v2 + ms_v2_queries_total;
 
-    // --- v3 : prétraitement puis temps par requête ---
     double ms_pre_v3 = 0;
     {
         auto t0 = Clock::now();
