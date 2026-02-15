@@ -447,23 +447,25 @@ std::optional<Vertex> Graph::lca(Vertex u, Vertex v) const {
     const int du = depth_[static_cast<size_t>(u)];
     const int dv = depth_[static_cast<size_t>(v)];
     if (du < 0 || dv < 0) return std::nullopt;
-    // Ramener le nœud le plus profond au même niveau que l'autre
+    // up_[v][k] = 2^k-ième ancêtre de v (binary lifting, rempli par build_binary_lifting)
     if (du < dv) std::swap(u, v);  // après : depth[u] >= depth[v]
     int d = depth_[static_cast<size_t>(u)] - depth_[static_cast<size_t>(v)];
     const int max_k = static_cast<int>(up_[static_cast<size_t>(u)].size()) - 1;
+    // Binary lifting : remonter u de d pas en sauts 2^k (O(log n) au lieu de O(d))
     for (int k = max_k; k >= 0 && d > 0; --k)
         if (d >= (1 << k)) {
             u = up_[static_cast<size_t>(u)][static_cast<size_t>(k)];
             d -= (1 << k);
         }
     if (u == v) return u;
+    // Binary lifting : remonter u et v ensemble par paliers 2^k jusqu'à être juste sous le LCA
     for (int k = max_k; k >= 0; --k) {
         if (up_[static_cast<size_t>(u)][static_cast<size_t>(k)] != up_[static_cast<size_t>(v)][static_cast<size_t>(k)]) {
             u = up_[static_cast<size_t>(u)][static_cast<size_t>(k)];
             v = up_[static_cast<size_t>(v)][static_cast<size_t>(k)];
         }
     }
-    return up_[static_cast<size_t>(u)][0];  // parent commun
+    return up_[static_cast<size_t>(u)][0];  // parent commun = LCA
 }
 
 std::vector<std::optional<Vertex>> Graph::tarjan_lca(const std::vector<std::pair<Vertex, Vertex>>& queries) const {

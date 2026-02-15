@@ -33,7 +33,7 @@ Pour un \textbf{arbre} $T = (V,E)$ (graphe connexe sans cycle), on souhaite :
   \item Repartir de $u$, refaire un BFS pour trouver un sommet $v$ le plus éloigné de $u$. Le chemin $u \leftrightarrow v$ est un \textbf{diamètre} de l'arbre (un plus long chemin).
   \item Le \textbf{centre} est le \textbf{milieu} de ce diamètre : un sommet si le diamètre a un nombre impair d'arêtes, sinon l'arête du milieu (on choisit alors un des deux sommets comme racine).
   \item On enracine l'arbre en ce centre et on remplit un tableau \texttt{parent} par un DFS depuis la racine.
-  \item Pour \textbf{LCA}$(u,v)$ : on remonte les ancêtres de $u$, puis on remonte depuis $v$ jusqu'au premier ancêtre commun.
+  \item Pour \textbf{LCA}$(u,v)$ : l'implémentation utilise le \textbf{binary lifting} (voir Algorithme~4') pour une complexité $O(\log n)$ par requête ; une version naïve par remontée et ensemble d'ancêtres est donnée en Algorithme~4 à titre de référence.
 \end{enumerate}
 
 \subsection{Pourquoi deux BFS suffisent}
@@ -122,12 +122,14 @@ On remplit \texttt{parent} par un DFS depuis la racine \texttt{centre}, en ne re
 \end{algorithmic}
 \end{algorithm}
 
-\section{Algorithme 4 : LCA par remontée des ancêtres}
+\section{Algorithme 4 : LCA naïf par remontée des ancêtres (référence)}
+
+Cette version est \textbf{non implémentée} dans le code : elle nécessite un ensemble (ex.\ \texttt{std::set}) et a une complexité $O(h)$ par requête, où $h$ est la hauteur. Elle est donnée à titre pédagogique ; l'implémentation réelle utilise l'Algorithme~4'.
 
 \begin{algorithm}[H]
-\caption{LCA$(u, v)$}
+\caption{LCA naïf$(u, v)$ --- non utilisé dans le code}
 \begin{algorithmic}[1]
-\Function{LCA}{$u$, $v$}
+\Function{LCANaif}{$u$, $v$}
   \State \texttt{ancetres\_u} $\gets$ ensemble vide
   \State $w \gets u$
   \While{$w \neq -1$}
@@ -143,6 +145,58 @@ On remplit \texttt{parent} par un DFS depuis la racine \texttt{centre}, en ne re
 \EndFunction
 \end{algorithmic}
 \end{algorithm}
+
+Complexité : $O(h)$ par requête (avec coût des opérations sur l'ensemble). \textbf{Non utilisé} dans \texttt{Graph::lca()}.
+
+\section{Algorithme 4' : LCA par binary lifting (implémentation)}
+
+C'est \textbf{cette} méthode qui est implémentée dans \texttt{Graph::lca()}. On suppose que les tables \texttt{up} (binary lifting), \texttt{depth} et \texttt{parent} ont été précalculées par \texttt{compute\_center\_and\_parent()} (qui appelle \texttt{build\_binary\_lifting}). Pour tout sommet $v$ et tout $k$, $\texttt{up}[v][k]$ désigne le $2^k$-ième ancêtre de $v$.
+
+\subsection{Idée}
+
+\begin{enumerate}[leftmargin=*]
+  \item Mettre $u$ et $v$ à la \textbf{même profondeur} : si $\texttt{depth}[u] > \texttt{depth}[v]$, remonter $u$ de $d = \texttt{depth}[u] - \texttt{depth}[v]$ pas en utilisant les sauts $2^k$ (décomposition binaire de $d$). Ainsi on fait $O(\log n)$ sauts au lieu de $O(d)$.
+  \item Si après cela $u = v$, c'est le LCA (un des deux était ancêtre de l'autre).
+  \item Sinon, remonter $u$ et $v$ \textbf{ensemble} par paliers de $2^k$ : pour $k$ du plus grand au plus petit, si $\texttt{up}[u][k] \neq \texttt{up}[v][k]$, alors $u \gets \texttt{up}[u][k]$ et $v \gets \texttt{up}[v][k]$. À la fin, $u$ et $v$ sont juste \emph{sous} le LCA, donc le LCA est $\texttt{parent}[u] = \texttt{up}[u][0]$.
+\end{enumerate}
+
+\subsection{Pseudo-code (correspond à \texttt{Graph::lca})}
+
+\begin{algorithm}[H]
+\caption{LCA$(u, v)$ par binary lifting --- \textbf{implémentation réelle}}
+\begin{algorithmic}[1]
+\Function{LCA}{$u$, $v$}
+  \State $d_u \gets \texttt{depth}[u]$, $d_v \gets \texttt{depth}[v]$
+  \If{$d_u < d_v$}
+    \State \Call{Swap}{$u$, $v$}
+    \Comment{après : $\texttt{depth}[u] \geq \texttt{depth}[v]$}
+  \EndIf
+  \State $d \gets \texttt{depth}[u] - \texttt{depth}[v]$
+  \State $K \gets \lceil \log_2 n \rceil$
+  \For{$k = K$ \textbf{downto} $0$}
+    \If{$d \geq 2^k$}
+      \State $u \gets \texttt{up}[u][k]$
+      \State $d \gets d - 2^k$
+    \EndIf
+  \EndFor
+  \Comment{$u$ et $v$ sont maintenant à la même profondeur}
+  \If{$u = v$}
+    \State \Return $u$
+  \EndIf
+  \For{$k = K$ \textbf{downto} $0$}
+    \If{$\texttt{up}[u][k] \neq \texttt{up}[v][k]$}
+      \State $u \gets \texttt{up}[u][k]$, $v \gets \texttt{up}[v][k]$
+    \EndIf
+  \EndFor
+  \State \Return $\texttt{up}[u][0]$
+  \Comment{parent commun = LCA}
+\EndFunction
+\end{algorithmic}
+\end{algorithm}
+
+\subsection{Complexité}
+
+Une requête LCA : $O(\log n)$ (au plus $2 \cdot \lceil \log_2 n \rceil$ itérations). C'est la méthode utilisée par \texttt{Graph::lca()} et par \texttt{itineraries\_v2}.
 
 \section{Algorithme 5 : LCA de Tarjan (hors-ligne)}
 
@@ -301,7 +355,7 @@ Le chemin unique entre $u$ et $v$ dans l'arbre passe par $L = \texttt{LCA}(u,v)$
 
 \subsection{Complexité}
 
-Une requête \texttt{MaxOnPathLCA} fait un LCA ($O(h)$ avec la remontée simple, $h$ = hauteur) puis deux \texttt{MaxOnPathToAncestor} ($O(\log n)$ chacun). Total : $O(h + \log n)$, au pire $O(n)$. (Si on implémentait LCA en $O(\log n)$ par binary lifting, le total deviendrait $O(\log n)$.)
+Une requête \texttt{MaxOnPathLCA} (ou \texttt{itineraries\_v2}) fait un LCA en $O(\log n)$ (binary lifting, Algorithme~4') puis deux \texttt{MaxOnPathToAncestor} en $O(\log n)$ chacun. Total : $O(\log n)$ par requête.
 
 \section{Itineraries v3 : most pleasant itineraries (prétraitement linéaire, requête en O(1))}
 
@@ -335,11 +389,11 @@ On suppose que l'ensemble des requêtes $P$ (paires $(u,v)$) est \textbf{connu �
   \item \textbf{FarthestEtChemin} : un BFS, $O(n + m) = O(n)$ pour un arbre ($m = n - 1$).
   \item \textbf{DiametreEtCentre} : deux BFS + parcours du chemin, $O(n)$.
   \item \textbf{RemplirParent} : un DFS, $O(n)$.
-  \item \textbf{LCA} (une requête) : $O(h)$ où $h$ est la hauteur, au pire $O(n)$. Avec $Q$ requêtes : $O(Q \cdot n)$.
+  \item \textbf{LCA} (une requête) : $O(\log n)$ avec l'Algorithme~4' (binary lifting, implémentation réelle). Avec $Q$ requêtes : $O(Q \log n)$. (La version naïve Algorithme~4 serait $O(h)$ par requête.)
   \item \textbf{Tarjan LCA} (toutes les requêtes $P$ connues à l'avance) : $O(n + |P|)$.
   \item \textbf{Binary lifting} (précalcul) : $O(n \log n)$ temps et espace.
   \item \textbf{max\_on\_path\_to\_ancestor} (une requête) : $O(\log n)$.
-  \item \textbf{max\_on\_path\_lca} (une requête) : $O(h + \log n)$ (LCA + deux max vers ancêtre).
+  \item \textbf{max\_on\_path\_lca} / \texttt{itineraries\_v2} (une requête) : $O(\log n)$ (LCA par binary lifting + deux max vers ancêtre).
   \item \textbf{preprocess\_max\_path\_final} ($P$ donné à l'avance) : Tarjan $O(n + |P|)$ + $|P|$ calculs de max en $O(\log n)$ chacun $\Rightarrow O(n + |P| \log n)$ ; stockage $O(|P|)$.
   \item \textbf{max\_path\_final} (une requête après prétraitement) : $O(1)$ en moyenne (accès table).
 \end{itemize}
