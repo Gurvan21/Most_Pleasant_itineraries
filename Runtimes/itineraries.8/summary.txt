@@ -1,5 +1,5 @@
 n = 200000, |P| = 500000
-  itineraries_v1 : (ignoré, SKIP_V1=1)
-  itineraries_v2 : prétraitement 1255.324 ms + requêtes 1792.468 ms = total 3047.793 ms
-  itineraries_v3 : prétraitement 3814.714 ms + requêtes 424.979 ms = total 4239.693 ms
+  itineraries_v1 : 20160915.940 ms (requêtes uniquement, pas de prétraitement)
+  itineraries_v2 : prétraitement 984.558 ms + requêtes 1365.900 ms = total 2350.457 ms
+  itineraries_v3 : prétraitement 2322.249 ms + requêtes 312.663 ms = total 2634.911 ms
   Résultats identiques : oui
