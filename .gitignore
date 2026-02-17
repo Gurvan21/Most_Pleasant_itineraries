@@ -22,3 +22,6 @@ venv/
 .vscode/
 .idea/
 *~
+
+./tests
+./outputItineraries
